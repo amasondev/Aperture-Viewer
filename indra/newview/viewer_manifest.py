@@ -1462,7 +1462,7 @@ class Darwin_x86_64_Manifest(ViewerManifest):
         # copy over the build result (this is a no-op if run within the xcode
         # script)
         #self.path(os.path.join(self.args['configuration'], self.channel() + ".app"), dst="")
-        self.path(os.path.join(self.args['configuration'], "Firestorm.app"), dst="")
+        self.path(os.path.join(self.args['configuration'], "Aperture.app"), dst="")
 
         pkgdir = os.path.join(self.args['build'], os.pardir, 'packages')
         relpkgdir = os.path.join(pkgdir, "lib", "release")
@@ -1474,7 +1474,7 @@ class Darwin_x86_64_Manifest(ViewerManifest):
 
         with self.prefix(src="", dst="Contents"):  # everything goes in Contents
             with self.prefix(dst="MacOS"):
-                executable = self.dst_path_of("Firestorm") # locate the executable within the bundle.
+                executable = self.dst_path_of("Aperture") # locate the executable within the bundle.
 
             bugsplat_db = self.args.get('bugsplat')
             print(f"debug: bugsplat_db={bugsplat_db}")
@@ -1501,7 +1501,24 @@ class Darwin_x86_64_Manifest(ViewerManifest):
             # Remember where we parked this car.
             with self.prefix(src="", dst="Frameworks"):
                 CEF_framework = "Chromium Embedded Framework.framework"
-                self.path2basename(relpkgdir, CEF_framework)
+                cef_src = os.path.join(relpkgdir, CEF_framework)
+                if os.path.isdir(os.path.join(cef_src, "Versions")):
+                    self.path2basename(relpkgdir, CEF_framework)
+                else:
+                    # Xcode 26+ requires embedded macOS frameworks to use a
+                    # versioned bundle layout (Versions/A/... + relative
+                    # symlinks) so validation locates Info.plist.
+                    self.path(cef_src, os.path.join(CEF_framework, "Versions", "A"))
+                    with self.prefix(dst=CEF_framework):
+                        self.symlinkf("A", os.path.join("Versions", "Current"), catch=False)
+                        for entry in sorted(os.listdir(cef_src)):
+                            if entry.startswith("."):
+                                continue
+                            self.symlinkf(
+                                os.path.join("Versions", "Current", entry),
+                                entry,
+                                catch=False,
+                            )
                 CEF_framework = self.dst_path_of(CEF_framework)
                 if self.args.get('bugsplat'):
                     self.path2basename(relpkgdir, "BugsplatMac.framework")
@@ -1822,7 +1839,7 @@ class Darwin_x86_64_Manifest(ViewerManifest):
         if ("package" in self.args['actions'] or 
             "unpacked" in self.args['actions']):
             self.run_command_shell('strip -S %(viewer_binary)r' %
-                            { 'viewer_binary' : self.dst_path_of('Contents/MacOS/Firestorm')})
+                            { 'viewer_binary' : self.dst_path_of('Contents/MacOS/Aperture')})
 # </FS:Ansariel> construct method VMP trampoline crazy VMP launcher juggling shamelessly replaced with old version
 
     def package_finish(self):

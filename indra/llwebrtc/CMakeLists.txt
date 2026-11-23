@@ -68,9 +68,11 @@ if (WINDOWS)
 endif (WINDOWS)
 
 ADD_CUSTOM_COMMAND(TARGET llwebrtc POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E make_directory
+                       "${SHARED_LIB_STAGING_DIR}"
                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
                        $<TARGET_FILE:llwebrtc>
-                               ${SHARED_LIB_STAGING_DIR})
+                               "${SHARED_LIB_STAGING_DIR}/$<TARGET_FILE_NAME:llwebrtc>")
 # Add tests
 if (LL_TESTS)
 endif (LL_TESTS)

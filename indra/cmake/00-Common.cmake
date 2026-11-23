@@ -209,7 +209,7 @@ if (DARWIN)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_CXX_LINK_FLAGS}")
   set(DARWIN_extra_cstar_flags "-Wno-unused-local-typedef -Wno-deprecated-declarations")
   #<FS:TS> Silence some more compiler warnings on Xcode 9
-  set(DARWIN_extra_cstar_flags "${DARWIN_extra_cstar_flags} -Wno-unused-const-variable -Wno-unused-private-field -Wno-potentially-evaluated-expression")
+  set(DARWIN_extra_cstar_flags "${DARWIN_extra_cstar_flags} -Wno-unused-const-variable -Wno-unused-private-field -Wno-potentially-evaluated-expression -Wno-unused-function -Wno-unused-but-set-variable")
   # Ensure that CMAKE_CXX_FLAGS has the correct -g debug information format --
   # see Variables.cmake.
   string(REPLACE "-gdwarf-2" "-g${CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT}"

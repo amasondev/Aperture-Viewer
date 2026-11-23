@@ -2765,13 +2765,13 @@ if (DARWIN)
   # magically known to CMake -- it's that these names are referenced in the
   # Info-SecondLife.plist file in the configure_file() directive below.
   #set(product "${VIEWER_CHANNEL}")
-  set(product "Firestorm")
-  set(MACOSX_EXECUTABLE_NAME "Firestorm")
-  set(MACOSX_BUNDLE_INFO_STRING "Firestorm Viewer")
-  set(MACOSX_BUNDLE_ICON_FILE "firestorm_icon.icns")
+  set(product "Aperture")
+  set(MACOSX_EXECUTABLE_NAME "Aperture")
+  set(MACOSX_BUNDLE_INFO_STRING "Aperture Viewer")
+  set(MACOSX_BUNDLE_ICON_FILE "aperture_icon.icns")
   set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.firestormviewer.firestorm")
   set(MACOSX_BUNDLE_LONG_VERSION_STRING "${VIEWER_CHANNEL} ${VIEWER_SHORT_VERSION}.${VIEWER_VERSION_REVISION}")
-  set(MACOSX_BUNDLE_BUNDLE_NAME "Firestorm")
+  set(MACOSX_BUNDLE_BUNDLE_NAME "Aperture")
   set(MACOSX_BUNDLE_SHORT_VERSION_STRING "${VIEWER_SHORT_VERSION}.${VIEWER_VERSION_REVISION}")
   set(MACOSX_BUNDLE_BUNDLE_VERSION "${VIEWER_SHORT_VERSION}${VIEWER_MACOSX_PHASE}${VIEWER_REVISION}")
   set(MACOSX_BUNDLE_COPYRIGHT "Copyright 2010-2025 The Phoenix Firestorm Project, Inc.")
@@ -2798,13 +2798,6 @@ if (DARWIN)
   set(VIEWER_APP_EXE "${VIEWER_APP_BUNDLE}/Contents/MacOS/${product}")
   set(VIEWER_APP_DSYM "${VIEWER_APP_EXE}.dSYM")
   set(VIEWER_APP_XCARCHIVE "${VIEWER_APP_BUNDLE}/../${product}.xcarchive.zip")
-
-  configure_file(
-     # <FS:CR> Use Firestorm plist
-     #"${CMAKE_CURRENT_SOURCE_DIR}/Info-SecondLife.plist"
-     "${CMAKE_CURRENT_SOURCE_DIR}/Info-Firestorm.plist"
-     "${VIEWER_APP_BUNDLE}/Contents/Info.plist"
-    )
 
   add_custom_command(
     TARGET ${VIEWER_BINARY_NAME} POST_BUILD
@@ -3131,4 +3124,3 @@ if (LL_TESTS)
 endif (LL_TESTS)
 
 check_message_template(${VIEWER_BINARY_NAME})
-

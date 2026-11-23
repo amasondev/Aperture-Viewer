@@ -214,6 +214,7 @@ NSWindowRef createNSWindow(int x, int y, int width, int height)
 {
 	LLNSWindow *window = [[LLNSWindow alloc]initWithContentRect:NSMakeRect(x, y, width, height)
 													  styleMask:NSTitledWindowMask | NSResizableWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSTexturedBackgroundWindowMask backing:NSBackingStoreBuffered defer:NO];
+	[window setColorSpace:[NSColorSpace sRGBColorSpace]];
 	[window makeKeyAndOrderFront:nil];
 	[window setAcceptsMouseMovedEvents:TRUE];
     [window setRestorable:FALSE]; // Viewer manages state from own settings
@@ -222,6 +223,7 @@ NSWindowRef createNSWindow(int x, int y, int width, int height)
 
 GLViewRef createOpenGLView(NSWindowRef window, unsigned int samples, bool vsync)
 {
+	[(LLNSWindow*)window setColorSpace:[NSColorSpace sRGBColorSpace]];
 	LLOpenGLView *glview = [[LLOpenGLView alloc]initWithFrame:[(LLNSWindow*)window frame] withSamples:samples andVsync:vsync];
 	[(LLNSWindow*)window setContentView:glview];
 	return glview;
