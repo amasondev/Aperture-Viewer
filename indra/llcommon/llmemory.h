@@ -71,7 +71,11 @@ LL_COMMON_API void ll_assert_aligned_func(uintptr_t ptr,U32 alignment);
 #define ll_assert_aligned(ptr,alignment)
 #endif
 
+#if LL_ARM64
+#include "sse2neon.h"
+#else
 #include <xmmintrin.h>
+#endif
 
 template <typename T> T* LL_NEXT_ALIGNED_ADDRESS(T* address)
 {

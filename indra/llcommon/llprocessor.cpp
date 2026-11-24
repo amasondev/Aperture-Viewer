@@ -638,6 +638,10 @@ public:
     {
         getCPUIDInfo();
         uint64_t frequency = getSysctlInt64("hw.cpufrequency");
+        if (frequency == 0) // fallback to clockrate and tbfrequency on Apple Silicon
+        {
+            frequency = getSysctlClockrate() * getSysctlInt64("hw.tbfrequency");
+        }
         setInfo(eFrequency, (F64)frequency  / (F64)1000000);
     }
 
@@ -674,6 +678,14 @@ private:
         }
 
         return result == -1 ? 0 : value;
+    }
+
+    uint64_t getSysctlClockrate()
+    {
+        struct clockinfo clockrate{};
+        size_t size = sizeof(clockrate);
+        int error = sysctlbyname("kern.clockrate", &clockrate, &size, nullptr, 0);
+        return error == -1 ? 0 : clockrate.hz;
     }
 
     void getCPUIDInfo()
@@ -727,7 +739,7 @@ private:
 
         // *NOTE:Mani - I didn't find any docs that assure me that machdep.cpu.feature_bits will always be
         // The feature bits I think it is. Here's a test:
-#ifndef LL_RELEASE_FOR_DOWNLOAD
+#if !defined(LL_RELEASE_FOR_DOWNLOAD) && !defined(LL_ARM64)
     #if defined(__i386__) && defined(__PIC__)
             /* %ebx may be the PIC register.  */
         #define __cpuid(level, a, b, c, d)          \

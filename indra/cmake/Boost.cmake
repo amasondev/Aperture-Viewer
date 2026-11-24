@@ -41,15 +41,15 @@ elseif (LINUX)
           boost_wave-mt${addrsfx})
 elseif (DARWIN)
   target_link_libraries( ll::boost INTERFACE
-          boost_context-mt${addrsfx}
-          boost_fiber-mt${addrsfx}
-          boost_filesystem-mt${addrsfx}
-          boost_program_options-mt${addrsfx}
-          boost_regex-mt${addrsfx}
-          boost_system-mt${addrsfx}
-          boost_thread-mt${addrsfx}
-          boost_url-mt${addrsfx}
-          boost_wave-mt${addrsfx})
+          boost_context-mt
+          boost_fiber-mt
+          boost_filesystem-mt
+          boost_program_options-mt
+          boost_regex-mt
+          boost_system-mt
+          boost_thread-mt
+          boost_url-mt
+          boost_wave-mt)
 endif (WINDOWS)
 
 if (LINUX)

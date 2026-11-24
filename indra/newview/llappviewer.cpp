@@ -1170,6 +1170,7 @@ bool LLAppViewer::init()
         return false;
     }
 
+#if defined(LL_X86) || defined(LL_X86_64)
     // Without SSE2 support we will crash almost immediately, warn here.
     if (!gSysCPU.hasSSE2())
     {
@@ -1181,6 +1182,7 @@ bool LLAppViewer::init()
         // quit immediately
         return false;
     }
+#endif
 
     // alert the user if they are using unsupported hardware
     if (gSavedSettings.getBOOL("FSUseLegacyUnsupportedHardwareChecks") && !gSavedSettings.getBOOL("AlertedUnsupportedHardware"))
@@ -1493,7 +1495,7 @@ void LLAppViewer::initMaxHeapSize()
     //------------------------------------------------------------------------------------------
     //currently SL is built under 32-bit setting, we set its max heap size no more than 1.6 GB.
 
- #ifndef LL_X86_64
+#if !defined(LL_X86_64) && !defined(LL_ARM64)
     F32Gigabytes max_heap_size_gb = (F32Gigabytes)gSavedSettings.getF32("MaxHeapSize") ;
 #else
     F32Gigabytes max_heap_size_gb = (F32Gigabytes)gSavedSettings.getF32("MaxHeapSize64");
@@ -6533,6 +6535,8 @@ void LLAppViewer::forceErrorBreakpoint()
     LL_WARNS() << "Forcing a deliberate breakpoint" << LL_ENDL;
 #ifdef LL_WINDOWS
     DebugBreak();
+#elif LL_ARM64
+    __builtin_debugtrap();
 #else
     asm ("int $3");
 #endif

@@ -29,8 +29,6 @@
 
 // this is defined so that we get static linking.
 #include "openjpeg.h"
-#include "event.h"
-#include "cio.h"
 
 #define MAX_ENCODED_DISCARD_LEVELS 5
 
@@ -225,11 +223,7 @@ public:
 
     JPEG2KDecode(S8 discardLevel)
     {
-        memset(&event_mgr, 0, sizeof(opj_event_mgr_t));
         memset(&parameters, 0, sizeof(opj_dparameters_t));
-        event_mgr.error_handler = error_callback;
-        event_mgr.warning_handler = warning_callback;
-        event_mgr.info_handler = info_callback;
         opj_set_default_decoder_parameters(&parameters);
         parameters.cp_reduce = discardLevel;
     }
@@ -411,7 +405,6 @@ public:
 
 private:
     opj_dparameters_t         parameters;
-    opj_event_mgr_t           event_mgr;
     opj_image_t*              image = nullptr;
     opj_codec_t*              decoder = nullptr;
     opj_stream_t*             stream = nullptr;
@@ -426,10 +419,6 @@ public:
     JPEG2KEncode(const char* comment_text_in, bool reversible)
     {
         memset(&parameters, 0, sizeof(opj_cparameters_t));
-        memset(&event_mgr, 0, sizeof(opj_event_mgr_t));
-        event_mgr.error_handler = error_callback;
-        event_mgr.warning_handler = warning_callback;
-        event_mgr.info_handler = info_callback;
 
         opj_set_default_encoder_parameters(&parameters);
         parameters.cod_format = OPJ_CODEC_J2K;
@@ -746,7 +735,6 @@ public:
 
 private:
     opj_cparameters_t   parameters;
-    opj_event_mgr_t     event_mgr;
     opj_image_t*        image = nullptr;
     opj_codec_t*        encoder = nullptr;
     opj_stream_t*       stream = nullptr;

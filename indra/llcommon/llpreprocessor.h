@@ -92,6 +92,30 @@
     #endif
 #endif
 
+// Set up CPU architecture defines
+#if LL_MSVC && defined(_M_ARM64)
+#      define LL_ARM64 1
+#elif LL_GNUC && (defined(__arm64__) || defined(__aarch64__))
+#      define LL_ARM64 1
+#elif LL_CLANG && (defined(__arm64__) || defined(__aarch64__))
+#      define LL_ARM64 1
+#elif LL_MSVC && _M_X64
+#      define LL_X86_64 1
+#      define LL_X86 1
+#elif LL_MSVC && _M_IX86
+#      define LL_X86 1
+#elif LL_GNUC && ( defined(__amd64__) || defined(__x86_64__) )
+#      define LL_X86_64 1
+#      define LL_X86 1
+#elif LL_CLANG && ( defined(__amd64__) || defined(__x86_64__) )
+#      define LL_X86_64 1
+#      define LL_X86 1
+#elif LL_CLANG && ( defined(__i386__) )
+#      define LL_X86 1
+#elif LL_GNUC && ( defined(__i386__) )
+#      define LL_X86 1
+#endif
+
 // Deal with minor differences on Unixy OSes.
 #if LL_DARWIN || LL_LINUX
     // Different name, same functionality.

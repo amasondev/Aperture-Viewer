@@ -33,6 +33,8 @@
 
 #if LL_WINDOWS
 #include <intrin.h>
+#elif LL_DARWIN && LL_ARM64
+#include <time.h>
 #endif
 
 #define LL_FAST_TIMER_ON 1
@@ -160,6 +162,22 @@ public:
     }
 
 #endif // (LL_LINUX) && !(defined(__i386__) || defined(__amd64__))
+
+
+#if LL_DARWIN && LL_ARM64
+    //
+    // Mac implementation of CPU clock - non-x86.
+    //
+    static U64 getCPUClockCount64()
+    {
+        return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    }
+
+    static U32 getCPUClockCount32()
+    {
+        return (U32)(getCPUClockCount64() >> 8);
+    }
+#endif // LL_DARWIN && LL_ARM64
 
 
 // <FS:ND> Linux/Mac should honour LL_FASTTIMER_USE_RDTSC too

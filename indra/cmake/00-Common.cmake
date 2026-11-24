@@ -39,9 +39,16 @@ add_compile_definitions( ADDRESS_SIZE=${ADDRESS_SIZE})
 # -- which we do. Without one or the other, we get a ton of Boost warnings.
 add_compile_definitions(BOOST_BIND_GLOBAL_PLACEHOLDERS)
 
-# Force enable SSE2 instructions in GLM per the manual
+# Force enable SSE2 instructions in GLM per the manual (non-ARM64 targets)
 # https://github.com/g-truc/glm/blob/master/manual.md#section2_10
-add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES=1 GLM_FORCE_SSE2=1 GLM_ENABLE_EXPERIMENTAL=1)
+if (DARWIN)
+  add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES=1 GLM_ENABLE_EXPERIMENTAL=1)
+else ()
+  add_compile_definitions(GLM_FORCE_DEFAULT_ALIGNED_GENTYPES=1 GLM_FORCE_SSE2=1 GLM_ENABLE_EXPERIMENTAL=1)
+endif ()
+
+# SSE2NEON throws a pointless warning when compiler optimizations are enabled
+add_compile_definitions(SSE2NEON_SUPPRESS_WARNINGS=1)
 
 # Configure crash reporting
 set(RELEASE_CRASH_REPORTING OFF CACHE BOOL "Enable use of crash reporting in release builds")

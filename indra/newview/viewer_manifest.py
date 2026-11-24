@@ -1758,6 +1758,7 @@ class Darwin_x86_64_Manifest(ViewerManifest):
                     # for all the multiple CEF/Dullahan (as of CEF 76) helper app bundles we need:
                     for helper in (
                         "DullahanHelper",
+                        "DullahanHelper (Alerts)",
                         "DullahanHelper (GPU)",
                         "DullahanHelper (Renderer)",
                         "DullahanHelper (Plugin)",
@@ -1861,7 +1862,7 @@ class Darwin_x86_64_Manifest(ViewerManifest):
 
         self.run_command(['hdiutil', 'create', sparsename,
                           '-volname', volname, '-fs', 'HFS+',
-                          '-type', 'SPARSE', '-megabytes', '1300',
+                          '-type', 'SPARSE', '-megabytes', '1800',
                           '-layout', 'SPUD'])
 
         # mount the image and get the name of the mount point and device node
@@ -1949,109 +1950,129 @@ class Darwin_x86_64_Manifest(ViewerManifest):
                 if identity == '':
                     identity = 'Developer ID Application'
 
+                ad_hoc_sign = False
                 # Look for an environment variable set via build.sh when running in Team City.
                 try:
                     build_secrets_checkout = os.environ['build_secrets_checkout']
                 except KeyError:
-                    pass
-                else:
-                    # variable found so use it to unlock keychain followed by codesign
-                    home_path = os.environ['HOME']
-                    keychain_pwd_path = os.path.join(build_secrets_checkout,'code-signing-osx','password.txt')
-                    keychain_pwd = open(keychain_pwd_path).read().rstrip()
+                    ad_hoc_sign = True # A minimum of ad-hoc signing is a requirement for arm64 builds to behave correctly
+                    identity = '-' # Ad-hoc identity
+                finally:
+                    if not ad_hoc_sign:
+                        # variable found so use it to unlock keychain followed by codesign
+                        home_path = os.environ['HOME']
+                        keychain_pwd_path = os.path.join(build_secrets_checkout,'code-signing-osx','password.txt')
+                        keychain_pwd = open(keychain_pwd_path).read().rstrip()
 
-                    # Note: As of macOS Sierra, keychains are created with
-                    #       names postfixed with '-db' so for example, the SL
-                    #       Viewer keychain would by default be found in
-                    #       ~/Library/Keychains/viewer.keychain-db instead of
-                    #       just ~/Library/Keychains/viewer.keychain in
-                    #       earlier versions.
-                    #
-                    #       Because we have old OS files from previous
-                    #       versions of macOS on the build hosts, the
-                    #       configurations are different on each host. Some
-                    #       have viewer.keychain, some have viewer.keychain-db
-                    #       and some have both. As you can see in the line
-                    #       below, this script expects the Linden Developer
-                    #       cert/keys to be in viewer.keychain.
-                    #
-                    #       To correctly sign builds you need to make sure
-                    #       ~/Library/Keychains/viewer.keychain exists on the
-                    #       host and that it contains the correct cert/key. If
-                    #       a build host is set up with a clean version of
-                    #       macOS Sierra (or later) then you will need to
-                    #       change this line (and the one for 'codesign'
-                    #       command below) to point to right place or else
-                    #       pull in the cert/key into the default viewer
-                    #       keychain 'viewer.keychain-db' and export it to
-                    #       'viewer.keychain'
-                    viewer_keychain = os.path.join(home_path, 'Library',
-                                                   'Keychains', 'viewer.keychain')
-                    if not os.path.isfile( viewer_keychain ):
-                        viewer_keychain += "-db"
+                        # Note: As of macOS Sierra, keychains are created with
+                        #       names postfixed with '-db' so for example, the SL
+                        #       Viewer keychain would by default be found in
+                        #       ~/Library/Keychains/viewer.keychain-db instead of
+                        #       just ~/Library/Keychains/viewer.keychain in
+                        #       earlier versions.
+                        #
+                        #       Because we have old OS files from previous
+                        #       versions of macOS on the build hosts, the
+                        #       configurations are different on each host. Some
+                        #       have viewer.keychain, some have viewer.keychain-db
+                        #       and some have both. As you can see in the line
+                        #       below, this script expects the Linden Developer
+                        #       cert/keys to be in viewer.keychain.
+                        #
+                        #       To correctly sign builds you need to make sure
+                        #       ~/Library/Keychains/viewer.keychain exists on the
+                        #       host and that it contains the correct cert/key. If
+                        #       a build host is set up with a clean version of
+                        #       macOS Sierra (or later) then you will need to
+                        #       change this line (and the one for 'codesign'
+                        #       command below) to point to right place or else
+                        #       pull in the cert/key into the default viewer
+                        #       keychain 'viewer.keychain-db' and export it to
+                        #       'viewer.keychain'
+                        viewer_keychain = os.path.join(home_path, 'Library',
+                                                       'Keychains', 'viewer.keychain')
+                        if not os.path.isfile( viewer_keychain ):
+                            viewer_keychain += "-db"
 
-                    if not os.path.isfile( viewer_keychain ):
-                        raise "No keychain named viewer found"
-                    
-                    self.run_command(['security', 'unlock-keychain',
-                                      '-p', keychain_pwd, viewer_keychain])
-                    sign_retry_wait=15
-                    resources = app_in_dmg + "/Contents/Resources/"
-                    plain_sign = glob.glob(resources + "llplugin/*.dylib")
+                        if not os.path.isfile( viewer_keychain ):
+                            raise RuntimeError("No keychain named viewer found")
 
-                    # <FS:ND> Even though we got some dylibs in Resources signed by LL, we also got some there that are *NOT*
-                    # At least: fmod, growl, GLOD
-                    # We could selectively sign those, or repackage them and then sign them. For an easy clean sweet we just resign them al
-                    plain_sign += glob.glob(resources + "*.dylib")
-                    plain_sign += glob.glob(resources + "llplugin/lib/*.dylib")
-                    plain_sign += glob.glob( app_in_dmg + "/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/*.dylib" )
+                        self.run_command(['security', 'unlock-keychain',
+                                          '-p', keychain_pwd, viewer_keychain])
 
-                    deep_sign = [
-                        # <FS:ND> Firestorm does not ship SLVersionChecker
-                        #resources + "updater/SLVersionChecker",
-                        resources + "SLPlugin.app/Contents/MacOS/SLPlugin",
-                        resources + "SLVoice",
-                        app_in_dmg,
-                        ]
-                    for attempt in range(3):
-                        if attempt: # second or subsequent iteration
-                            print("codesign failed, waiting {:d} seconds before retrying".format(sign_retry_wait),
-                                  file=sys.stderr)
-                            time.sleep(sign_retry_wait)
-                            sign_retry_wait*=2
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        tmp_app_path = os.path.join(tmpdir, self.app_name() + ".app")
+                        print("Copying app to temporary folder for signing:", tmp_app_path)
+                        subprocess.run(['ditto', app_in_dmg, tmp_app_path], check=True)
 
-                        try:
-                            # Note: See blurb above about names of keychains
-                            for signee in plain_sign:
-                                self.run_command(
-                                    ['codesign',
-                                     '--force',
-                                     '--timestamp',
-                                     '--keychain', viewer_keychain,
-                                     '--sign', identity,
-                                     signee])
-                            for signee in deep_sign:
-                                self.run_command(
-                                    ['codesign',
-                                     '--verbose',
-                                     '--deep',
-                                     '--force',
-                                     '--entitlements', self.src_path_of("slplugin.entitlements"),
-                                     '--options', 'runtime',
-                                     '--keychain', viewer_keychain,
-                                     '--sign', identity,
-                                     signee])
-                            break # if no exception was raised, the codesign worked
-                        except ManifestError as err:
-                            # 'err' goes out of scope
-                            sign_failed = err
-                    else:
-                        print("Maximum codesign attempts exceeded; giving up", file=sys.stderr)
-                        raise sign_failed
-                    # <FS:ND> This fails sometimes and works other times. Even when notarization (down below) is a success
-                    # Remove it for now and investigate after we did notarize  a few times
-                    #self.run_command(['spctl', '-a', '-texec', '-vvvv', app_in_dmg])
-                    self.run_command([self.src_path_of("installers/darwin/apple-notarize.sh"), app_in_dmg])
+                        sign_retry_wait=15
+                        resources = tmp_app_path + "/Contents/Resources/"
+                        plain_sign = glob.glob(resources + "llplugin/*.dylib")
+
+                        # <FS:ND> Even though we got some dylibs in Resources signed by LL, we also got some there that are *NOT*
+                        # At least: fmod, growl, GLOD
+                        # We could selectively sign those, or repackage them and then sign them. For an easy clean sweet we just resign them al
+                        plain_sign += glob.glob(resources + "*.dylib")
+                        plain_sign += glob.glob(resources + "llplugin/lib/*.dylib")
+                        plain_sign += glob.glob( tmp_app_path + "/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/*.dylib" )
+
+                        deep_sign = [
+                            # <FS:ND> Firestorm does not ship SLVersionChecker
+                            #resources + "updater/SLVersionChecker",
+                            resources + "SLPlugin.app/Contents/MacOS/SLPlugin",
+                            resources + "SLVoice",
+                            tmp_app_path,
+                            ]
+                        for attempt in range(3):
+                            if attempt: # second or subsequent iteration
+                                print("codesign failed, waiting {:d} seconds before retrying".format(sign_retry_wait),
+                                      file=sys.stderr)
+                                time.sleep(sign_retry_wait)
+                                sign_retry_wait*=2
+
+                            try:
+                                # Note: See blurb above about names of keychains
+                                for signee in plain_sign:
+                                    args = [
+                                        'codesign',
+                                        '--force',
+                                        '--timestamp'
+                                    ]
+                                    if not ad_hoc_sign:
+                                        args += ['--keychain', viewer_keychain]
+                                    args += ['--sign', identity, signee]
+                                    self.run_command(args)
+                                for signee in deep_sign:
+                                    args = [
+                                        'codesign',
+                                        '--verbose',
+                                        '--deep',
+                                        '--force',
+                                        '--entitlements', self.src_path_of("slplugin.entitlements"),
+                                        '--options', 'runtime'
+                                    ]
+                                    if not ad_hoc_sign:
+                                        args += ['--keychain', viewer_keychain]
+                                    args += ['--sign', identity, signee]
+                                    self.run_command(args)
+                                break # if no exception was raised, the codesign worked
+                            except ManifestError as err:
+                                # 'err' goes out of scope
+                                sign_failed = err
+                        else:
+                            print("Maximum codesign attempts exceeded; giving up", file=sys.stderr)
+                            raise sign_failed
+
+                        # Signing succeeded, now delete the original app in the mounted sparse image and notarize if needed
+                        shutil.rmtree(app_in_dmg)
+                        if not ad_hoc_sign:
+                            # <FS:ND> This fails sometimes and works other times. Even when notarization (down below) is a success
+                            # Remove it for now and investigate after we did notarize  a few times
+                            #self.run_command(['spctl', '-a', '-texec', '-vvvv', app_in_dmg])
+                            self.run_command([self.src_path_of("installers/darwin/apple-notarize.sh"), tmp_app_path])
+
+                        print("Copying signed app back into mounted sparse image")
+                        subprocess.run(['ditto', tmp_app_path, app_in_dmg], check=True)
 
         finally:
             # Unmount the image even if exceptions from any of the above 
