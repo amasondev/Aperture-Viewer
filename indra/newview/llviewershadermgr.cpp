@@ -203,6 +203,7 @@ LLGLSLShader            gLegacyPostGammaCorrectProgram;
 LLGLSLShader            gExposureProgram;
 LLGLSLShader            gExposureProgramNoFade;
 LLGLSLShader            gLuminanceProgram;
+LLGLSLShader            gLuminanceDownsampleProgram;
 LLGLSLShader            gFXAAProgram[4];
 LLGLSLShader            gSMAAEdgeDetectProgram[4];
 LLGLSLShader            gSMAABlendWeightsProgram[4];
@@ -1135,6 +1136,7 @@ bool LLViewerShaderMgr::loadShadersDeferred()
         gExposureProgram.unload();
         gExposureProgramNoFade.unload();
         gLuminanceProgram.unload();
+        gLuminanceDownsampleProgram.unload();
         gDeferredPostGammaCorrectProgram.unload();
         gLegacyPostGammaCorrectProgram.unload();
         gDeferredPostTonemapProgram.unload();
@@ -2449,6 +2451,19 @@ bool LLViewerShaderMgr::loadShadersDeferred()
         gLuminanceProgram.mShaderFiles.push_back(make_pair("deferred/luminanceF.glsl", GL_FRAGMENT_SHADER));
         gLuminanceProgram.mShaderLevel = mShaderLevel[SHADER_DEFERRED];
         success = gLuminanceProgram.createShader();
+        llassert(success);
+    }
+
+    if (success)
+    {
+        gLuminanceDownsampleProgram.mName = "Luminance Downsample";
+        gLuminanceDownsampleProgram.mShaderFiles.clear();
+        gLuminanceDownsampleProgram.clearPermutations();
+        gLuminanceDownsampleProgram.addPermutation("LUMINANCE_DOWNSAMPLE", "1");
+        gLuminanceDownsampleProgram.mShaderFiles.push_back(make_pair("deferred/postDeferredNoTCV.glsl", GL_VERTEX_SHADER));
+        gLuminanceDownsampleProgram.mShaderFiles.push_back(make_pair("deferred/luminanceF.glsl", GL_FRAGMENT_SHADER));
+        gLuminanceDownsampleProgram.mShaderLevel = mShaderLevel[SHADER_DEFERRED];
+        success = gLuminanceDownsampleProgram.createShader();
         llassert(success);
     }
 

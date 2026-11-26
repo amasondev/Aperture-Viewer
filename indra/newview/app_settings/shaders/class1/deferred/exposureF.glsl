@@ -46,9 +46,22 @@ float lum(vec3 col)
 
 void main()
 {
-    vec2 tc = vec2(0.5,0.5);
+    vec2 tc = vec2(0.5, 0.5);
 
-    float L = textureLod(emissiveRect, tc, 8).r;
+    // Average the 16x16 downsampled luminance target using an 8x8 grid of bilinear taps
+    // (avoids glGenerateMipmap command-buffer flush on macOS OpenGL-on-Metal).
+    vec2 texel = 1.0 / vec2(textureSize(emissiveRect, 0));
+    float sum = 0.0;
+    for (int y = 0; y < 8; ++y)
+    {
+        float oy = (float(y) * 2.0 - 7.0) * texel.y;
+        for (int x = 0; x < 8; ++x)
+        {
+            float ox = (float(x) * 2.0 - 7.0) * texel.x;
+            sum += texture(emissiveRect, tc + vec2(ox, oy)).r;
+        }
+    }
+    float L = sum * (1.0 / 64.0);
     float max_L = dynamic_exposure_params.x;
     L = clamp(L, 0.0, max_L);
     L /= max_L;

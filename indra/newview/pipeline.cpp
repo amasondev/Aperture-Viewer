@@ -1462,6 +1462,7 @@ void LLPipeline::releaseLUTBuffers()
 
     mExposureMap.release();
     mLuminanceMap.release();
+    mLuminanceDownsample.release();
     mLastExposure.release();
 
 }
@@ -1760,7 +1761,8 @@ void LLPipeline::createLUTBuffers()
     glClearColor(0, 0, 0, 0);
     mExposureMap.flush();
 
-    mLuminanceMap.allocate(256, 256, GL_R16F, false, LLTexUnit::TT_TEXTURE, LLTexUnit::TMG_AUTO);
+    mLuminanceMap.allocate(256, 256, GL_R16F);
+    mLuminanceDownsample.allocate(16, 16, GL_R16F);
 
     mLastExposure.allocate(1, 1, GL_R16F);
 }
@@ -7426,6 +7428,25 @@ void LLPipeline::generateExposure(LLRenderTarget* src, LLRenderTarget* dst, bool
     {
         LL_PROFILE_GPU_ZONE("exposure sample");
 
+        LLGLDepthTest depth(GL_FALSE, GL_FALSE);
+
+        // Downsample 256x256 luminance target to 16x16 in a single shader pass
+        // instead of calling glGenerateMipmap (which forces a Metal command-buffer flush on macOS).
+        {
+            LL_PROFILE_GPU_ZONE("luminance downsample");
+            mLuminanceDownsample.bindTarget();
+            gLuminanceDownsampleProgram.bind();
+            S32 channel = gLuminanceDownsampleProgram.enableTexture(LLShaderMgr::DEFERRED_DIFFUSE);
+            if (channel > -1)
+            {
+                src->bindTexture(0, channel, LLTexUnit::TFO_BILINEAR);
+            }
+            mScreenTriangleVB->setBuffer();
+            mScreenTriangleVB->drawArrays(LLRender::TRIANGLES, 0, 3);
+            mLuminanceDownsample.flush();
+            gLuminanceDownsampleProgram.unbind();
+        }
+
         if (use_history)
         {
             // copy last frame's exposure into mLastExposure
@@ -7440,8 +7461,6 @@ void LLPipeline::generateExposure(LLRenderTarget* src, LLRenderTarget* dst, bool
         }
 
         dst->bindTarget();
-
-        LLGLDepthTest depth(GL_FALSE, GL_FALSE);
 
         LLGLSLShader* shader;
         if (use_history)
@@ -7458,7 +7477,7 @@ void LLPipeline::generateExposure(LLRenderTarget* src, LLRenderTarget* dst, bool
         S32 channel = shader->enableTexture(LLShaderMgr::DEFERRED_EMISSIVE);
         if (channel > -1)
         {
-            src->bindTexture(0, channel, LLTexUnit::TFO_TRILINEAR);
+            mLuminanceDownsample.bindTexture(0, channel, LLTexUnit::TFO_BILINEAR);
         }
 
         if (use_history)
@@ -8318,7 +8337,7 @@ bool LLPipeline::renderSnapshotFrame(LLRenderTarget* src, LLRenderTarget* dst)
 }
 // </FS:Beq>
 
-void LLPipeline::renderDoF(LLRenderTarget* src, LLRenderTarget* dst)
+bool LLPipeline::renderDoF(LLRenderTarget* src, LLRenderTarget* dst, bool copy_on_skip)
 {
     {
         sDoFEnabled = // <FS:Beq/> // FIRE-32023 Render focus point
@@ -8533,11 +8552,14 @@ void LLPipeline::renderDoF(LLRenderTarget* src, LLRenderTarget* dst)
 
                 dst->flush();
             }
+            return true;
         }
-        else
+        else if (copy_on_skip)
         {
             copyRenderTarget(src, dst);
+            return true;
         }
+        return false;
     }
 }
 
@@ -8596,18 +8618,22 @@ void LLPipeline::renderFinalize()
     gGLViewport[3] = gViewerWindow->getWorldViewRectRaw().getHeight();
     glViewport(gGLViewport[0], gGLViewport[1], gGLViewport[2], gGLViewport[3]);
 
-    renderDoF(&mPostMap, &mRT->screen);
+    LLRenderTarget* activeBuffer = &mPostMap;
+    LLRenderTarget* targetBuffer = &mRT->screen;
 
-    LLRenderTarget* finalBuffer = &mRT->screen;
+    if (renderDoF(activeBuffer, targetBuffer, false))
+    {
+        std::swap(activeBuffer, targetBuffer);
+    }
+
     if (RenderFSAAType == 1)
     {
-        applyFXAA(&mRT->screen, &mPostMap);
-        finalBuffer = &mPostMap;
+        applyFXAA(activeBuffer, targetBuffer);
+        std::swap(activeBuffer, targetBuffer);
     }
 
     // <FS:Beq> Restore shader post proc for Vignette
-    LLRenderTarget* activeBuffer = finalBuffer;
-    LLRenderTarget* targetBuffer = RenderFSAAType ? &mRT->screen : &mPostMap;
+    LLRenderTarget* finalBuffer = activeBuffer;
 // [RLVa:KB] - @setsphere
     if (RlvActions::hasBehaviour(RLV_BHVR_SETSPHERE))
     {

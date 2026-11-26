@@ -261,6 +261,7 @@ extern LLGLSLShader         gNoPostTonemapProgram;
 extern LLGLSLShader         gExposureProgram;
 extern LLGLSLShader         gExposureProgramNoFade;
 extern LLGLSLShader         gLuminanceProgram;
+extern LLGLSLShader         gLuminanceDownsampleProgram;
 extern LLGLSLShader         gDeferredAvatarShadowProgram;
 extern LLGLSLShader         gDeferredAvatarAlphaShadowProgram;
 extern LLGLSLShader         gDeferredAvatarAlphaMaskShadowProgram;

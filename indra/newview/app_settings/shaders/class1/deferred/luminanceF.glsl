@@ -43,6 +43,25 @@ float lum(vec3 col)
     return dot(l, col);
 }
 
+#ifdef LUMINANCE_DOWNSAMPLE
+// Downsample 256x256 luminance map to 16x16 using an 8x8 grid of bilinear taps
+// (each bilinear tap averages a 2x2 block of texels -> exact 16x16 box filter).
+void main()
+{
+    vec2 texel = 1.0 / vec2(textureSize(diffuseRect, 0));
+    float sum = 0.0;
+    for (int y = 0; y < 8; ++y)
+    {
+        float oy = (float(y) * 2.0 - 7.0) * texel.y;
+        for (int x = 0; x < 8; ++x)
+        {
+            float ox = (float(x) * 2.0 - 7.0) * texel.x;
+            sum += texture(diffuseRect, vary_fragcoord + vec2(ox, oy)).r;
+        }
+    }
+    frag_color = vec4(sum * (1.0 / 64.0));
+}
+#else
 void main()
 {
     vec2 tc = vary_fragcoord*0.6+0.2;
@@ -65,4 +84,5 @@ void main()
     float L = lum(c);
     frag_color = vec4(max(L, 0.0));
 }
+#endif
 

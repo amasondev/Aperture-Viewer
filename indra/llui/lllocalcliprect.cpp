@@ -30,6 +30,11 @@
 #include "llui.h"
 
 /*static*/ std::stack<LLRect> LLScreenClipRect::sClipRectStack;
+/*static*/ bool LLScreenClipRect::sCurScissorValid = false;
+/*static*/ S32 LLScreenClipRect::sCurScissorX = 0;
+/*static*/ S32 LLScreenClipRect::sCurScissorY = 0;
+/*static*/ S32 LLScreenClipRect::sCurScissorW = 0;
+/*static*/ S32 LLScreenClipRect::sCurScissorH = 0;
 
 
 LLScreenClipRect::LLScreenClipRect(const LLRect& rect, bool enabled)
@@ -49,7 +54,14 @@ LLScreenClipRect::~LLScreenClipRect()
     if (mEnabled)
     {
         popClipRect();
-        updateScissorRegion();
+        if (sClipRectStack.empty())
+        {
+            sCurScissorValid = false;
+        }
+        else
+        {
+            updateScissorRegion();
+        }
     }
 }
 
@@ -82,18 +94,34 @@ void LLScreenClipRect::updateScissorRegion()
 {
     if (sClipRectStack.empty()) return;
 
-    // finish any deferred calls in the old clipping region
-    gGL.flush();
-
     LLRect rect = sClipRectStack.top();
-    stop_glerror();
     S32 x,y,w,h;
     x = llfloor(rect.mLeft * LLUI::getScaleFactor().mV[VX]);
     y = llfloor(rect.mBottom * LLUI::getScaleFactor().mV[VY]);
     w = llmax(0, llceil(rect.getWidth() * LLUI::getScaleFactor().mV[VX])) + 1;
     h = llmax(0, llceil(rect.getHeight() * LLUI::getScaleFactor().mV[VY])) + 1;
+
+    if (sCurScissorValid &&
+        x == sCurScissorX &&
+        y == sCurScissorY &&
+        w == sCurScissorW &&
+        h == sCurScissorH)
+    {
+        return;
+    }
+
+    // finish any deferred calls in the old clipping region
+    gGL.flush();
+
+    stop_glerror();
     glScissor( x,y,w,h );
     stop_glerror();
+
+    sCurScissorX = x;
+    sCurScissorY = y;
+    sCurScissorW = w;
+    sCurScissorH = h;
+    sCurScissorValid = true;
 }
 
 //---------------------------------------------------------------------------

@@ -788,11 +788,16 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
 
     gPipeline.mRT = &gPipeline.mMainRT;
 
-    S32 sourceIdx = mReflectionProbeCount;
+    S32 scratchIdx = 0;
 
     if (probe != mUpdatingProbe)
     { // this is the "realtime" probe that's updating every frame, use the secondary scratch space channel
-        sourceIdx += 1;
+        scratchIdx = 1;
+    }
+
+    if (!mCubeFBO)
+    {
+        glGenFramebuffers(1, &mCubeFBO);
     }
 
     gGL.setColorMask(true, true);
@@ -848,8 +853,10 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
 
         gReflectionMipProgram.bind();
         S32 diffuseChannel = gReflectionMipProgram.enableTexture(LLShaderMgr::DEFERRED_DIFFUSE, LLTexUnit::TT_TEXTURE);
+        gReflectionMipProgram.uniform1f(resScale, 1.f/(mProbeResolution*2));
 
-        for (int i = 0; i < mMipChain.size(); ++i)
+        // Build 2D mip chain needed as inputs for successive downsamples
+        for (size_t i = 0; i + 1 < mMipChain.size(); ++i)
         {
             LL_PROFILE_GPU_ZONE("probe mip");
             mMipChain[i].bindTarget();
@@ -862,30 +869,51 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
                 gGL.getTexUnit(diffuseChannel)->bind(&(mMipChain[i - 1]));
             }
 
-
-            gReflectionMipProgram.uniform1f(resScale, 1.f/(mProbeResolution*2));
-
             gPipeline.mScreenTriangleVB->setBuffer();
             gPipeline.mScreenTriangleVB->drawArrays(LLRender::TRIANGLES, 0, 3);
+            mMipChain[i].flush();
+        }
 
+        // Render each mip directly into mScratchTexture layer via glFramebufferTextureLayer
+        // (avoids glCopyTexSubImage3D forcing a Metal command-buffer flush per mip on macOS).
+        glBindFramebuffer(GL_FRAMEBUFFER, mCubeFBO);
+        LLRenderTarget::sCurFBO = mCubeFBO;
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+        for (size_t i = 0; i < mMipChain.size(); ++i)
+        {
             res /= 2;
-
-            GLint mip = i - (static_cast<GLint>(mMipChain.size()) - mips);
+            GLint mip = static_cast<GLint>(i) - (static_cast<GLint>(mMipChain.size()) - mips);
 
             if (mip >= 0)
             {
                 LL_PROFILE_GPU_ZONE("probe mip copy");
-                mTexture->bind(0);
-                //glCopyTexSubImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, mip, 0, 0, probe->mCubeIndex * 6 + face, 0, 0, res, res);
-                glCopyTexSubImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, mip, 0, 0, sourceIdx * 6 + face, 0, 0, res, res);
-                //if (i == 0)
-                //{
-                    //glCopyTexSubImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, mip, 0, 0, probe->mCubeIndex * 6 + face, 0, 0, res, res);
-                //}
-                mTexture->unbind();
+                if (i == 0)
+                {
+                    gGL.getTexUnit(diffuseChannel)->bind(screen_rt);
+                }
+                else
+                {
+                    gGL.getTexUnit(diffuseChannel)->bind(&(mMipChain[i - 1]));
+                }
+
+                glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, mScratchTexture->getGLName(), mip, scratchIdx * 6 + face);
+                glViewport(0, 0, res, res);
+
+                gPipeline.mScreenTriangleVB->setBuffer();
+                gPipeline.mScreenTriangleVB->drawArrays(LLRender::TRIANGLES, 0, 3);
             }
-            mMipChain[i].flush();
         }
+
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 0, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        LLRenderTarget::sCurFBO = 0;
+        glViewport(gGLViewport[0], gGLViewport[1], gGLViewport[2], gGLViewport[3]);
+        LLRenderTarget::sCurResX = gGLViewport[2];
+        LLRenderTarget::sCurResY = gGLViewport[3];
+        glReadBuffer(GL_BACK);
+        glDrawBuffer(GL_BACK);
 
         gGL.popMatrix();
         gGL.matrixMode(gGL.MM_MODELVIEW);
@@ -897,18 +925,22 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
 
     if (face == 5)
     {
-        mMipChain[0].bindTarget();
+        glBindFramebuffer(GL_FRAMEBUFFER, mCubeFBO);
+        LLRenderTarget::sCurFBO = mCubeFBO;
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+
         static LLStaticHashedString sSourceIdx("sourceIdx");
 
         if (isRadiancePass())
         {
-            //generate radiance map (even if this is not the irradiance map, we need the mip chain for the irradiance map)
+            //generate radiance map directly into mTexture cubemap array layers (reading from separate mScratchTexture)
             gRadianceGenProgram.bind();
             mVertexBuffer->setBuffer();
 
             S32 channel = gRadianceGenProgram.enableTexture(LLShaderMgr::REFLECTION_PROBES, LLTexUnit::TT_CUBE_MAP_ARRAY);
-            mTexture->bind(channel);
-            gRadianceGenProgram.uniform1i(sSourceIdx, sourceIdx);
+            mScratchTexture->bind(channel);
+            gRadianceGenProgram.uniform1i(sSourceIdx, scratchIdx);
             gRadianceGenProgram.uniform1f(LLShaderMgr::REFLECTION_PROBE_MAX_LOD, mMaxProbeLOD);
             gRadianceGenProgram.uniform1f(LLShaderMgr::REFLECTION_PROBE_STRENGTH, 1.f);
 
@@ -921,12 +953,16 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
                 static LLStaticHashedString sRoughness("roughness");
                 static LLStaticHashedString sWidth("u_width");
 
+                glViewport(0, 0, res, res);
+
                 gRadianceGenProgram.uniform1f(sRoughness, (F32)i / (F32)(mMipChain.size() - 1));
                 gRadianceGenProgram.uniform1f(sMipLevel, (GLfloat)i);
                 gRadianceGenProgram.uniform1i(sWidth, mProbeResolution);
 
                 for (int cf = 0; cf < 6; ++cf)
                 { // for each cube face
+                    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, mTexture->getGLName(), i, probe->mCubeIndex * 6 + cf);
+
                     LLCoordFrame frame;
                     frame.lookAt(LLVector3(0, 0, 0), LLCubeMapArray::sClipToCubeLookVecs[cf], LLCubeMapArray::sClipToCubeUpVecs[cf]);
 
@@ -935,47 +971,36 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
                     gGL.loadMatrix(mat);
 
                     mVertexBuffer->drawArrays(gGL.TRIANGLE_STRIP, 0, 4);
-
-                    glCopyTexSubImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, i, 0, 0, probe->mCubeIndex * 6 + cf, 0, 0, res, res);
                 }
 
                 if (i != mMipChain.size() - 1)
                 {
                     res /= 2;
-                    glViewport(0, 0, res, res);
                 }
             }
 
+            mScratchTexture->unbind();
             gRadianceGenProgram.unbind();
         }
         else
         {
-            //generate irradiance map
+            //generate irradiance map directly into mIrradianceMaps cubemap array layers
             gIrradianceGenProgram.bind();
             S32 channel = gIrradianceGenProgram.enableTexture(LLShaderMgr::REFLECTION_PROBES, LLTexUnit::TT_CUBE_MAP_ARRAY);
-            mTexture->bind(channel);
+            mScratchTexture->bind(channel);
 
-            gIrradianceGenProgram.uniform1i(sSourceIdx, sourceIdx);
+            gIrradianceGenProgram.uniform1i(sSourceIdx, scratchIdx);
             gIrradianceGenProgram.uniform1f(LLShaderMgr::REFLECTION_PROBE_MAX_LOD, mMaxProbeLOD);
 
             mVertexBuffer->setBuffer();
-            int start_mip = 0;
-            // find the mip target to start with based on irradiance map resolution
-            for (start_mip = 0; start_mip < mMipChain.size(); ++start_mip)
-            {
-                if (mMipChain[start_mip].getWidth() == LL_IRRADIANCE_MAP_RESOLUTION)
-                {
-                    break;
-                }
-            }
+            glViewport(0, 0, LL_IRRADIANCE_MAP_RESOLUTION, LL_IRRADIANCE_MAP_RESOLUTION);
 
-            //for (int i = start_mip; i < mMipChain.size(); ++i)
             {
-                int i = start_mip;
                 LL_PROFILE_GPU_ZONE("probe irradiance gen");
-                glViewport(0, 0, mMipChain[i].getWidth(), mMipChain[i].getHeight());
                 for (int cf = 0; cf < 6; ++cf)
                 { // for each cube face
+                    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, mIrradianceMaps->getGLName(), 0, probe->mCubeIndex * 6 + cf);
+
                     LLCoordFrame frame;
                     frame.lookAt(LLVector3(0, 0, 0), LLCubeMapArray::sClipToCubeLookVecs[cf], LLCubeMapArray::sClipToCubeUpVecs[cf]);
 
@@ -984,18 +1009,21 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
                     gGL.loadMatrix(mat);
 
                     mVertexBuffer->drawArrays(gGL.TRIANGLE_STRIP, 0, 4);
-
-                    S32 res = mMipChain[i].getWidth();
-                    mIrradianceMaps->bind(channel);
-                    glCopyTexSubImage3D(GL_TEXTURE_CUBE_MAP_ARRAY, i - start_mip, 0, 0, probe->mCubeIndex * 6 + cf, 0, 0, res, res);
-                    mTexture->bind(channel);
                 }
             }
+
+            mScratchTexture->unbind();
+            gIrradianceGenProgram.unbind();
         }
 
-        mMipChain[0].flush();
-
-        gIrradianceGenProgram.unbind();
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 0, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        LLRenderTarget::sCurFBO = 0;
+        glViewport(gGLViewport[0], gGLViewport[1], gGLViewport[2], gGLViewport[3]);
+        LLRenderTarget::sCurResX = gGLViewport[2];
+        LLRenderTarget::sCurResY = gGLViewport[3];
+        glReadBuffer(GL_BACK);
+        glDrawBuffer(GL_BACK);
     }
 }
 
@@ -1430,29 +1458,32 @@ void LLReflectionMapManager::initReflectionMaps()
         mProbeResolution = probe_resolution;
         mMaxProbeLOD = log2f((F32)mProbeResolution) - 1.f; // number of mips - 1
 
+        static LLCachedControl<bool> render_hdr(gSavedSettings, "RenderHDREnabled", true);
+
         if (mTexture.isNull() ||
             mTexture->getWidth() != mProbeResolution ||
-            mReflectionProbeCount + 2 != mTexture->getCount())
+            mReflectionProbeCount != mTexture->getCount())
         {
             if (mTexture)
             {
-                mTexture = new LLCubeMapArray(*mTexture, mProbeResolution, mReflectionProbeCount + 2);
+                mTexture = new LLCubeMapArray(*mTexture, mProbeResolution, mReflectionProbeCount);
 
                 mIrradianceMaps = new LLCubeMapArray(*mIrradianceMaps, LL_IRRADIANCE_MAP_RESOLUTION, mReflectionProbeCount);
             }
             else
             {
                 mTexture = new LLCubeMapArray();
-
-                static LLCachedControl<bool> render_hdr(gSavedSettings, "RenderHDREnabled", true);
-
-                // store mReflectionProbeCount+2 cube maps, final two cube maps are used for render target and radiance map generation
-                // source)
-                mTexture->allocate(mProbeResolution, 3, mReflectionProbeCount + 2, true, render_hdr);
+                mTexture->allocate(mProbeResolution, 3, mReflectionProbeCount, true, render_hdr);
 
                 mIrradianceMaps = new LLCubeMapArray();
                 mIrradianceMaps->allocate(LL_IRRADIANCE_MAP_RESOLUTION, 3, mReflectionProbeCount, false, render_hdr);
             }
+        }
+
+        if (mScratchTexture.isNull() || mScratchTexture->getWidth() != mProbeResolution)
+        {
+            mScratchTexture = new LLCubeMapArray();
+            mScratchTexture->allocate(mProbeResolution, 3, 2, true, render_hdr);
         }
 
         // reset probe state
@@ -1526,7 +1557,19 @@ void LLReflectionMapManager::cleanup()
     mMipChain.clear();
 
     mTexture = nullptr;
+    mScratchTexture = nullptr;
     mIrradianceMaps = nullptr;
+
+    if (mCubeFBO)
+    {
+        if (LLRenderTarget::sCurFBO == mCubeFBO)
+        {
+            LLRenderTarget::sCurFBO = 0;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+        glDeleteFramebuffers(1, &mCubeFBO);
+        mCubeFBO = 0;
+    }
 
     mProbes.clear();
     mKillList.clear();

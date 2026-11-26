@@ -162,7 +162,7 @@ public:
     void applyFXAA(LLRenderTarget* src, LLRenderTarget* dst);
     void generateSMAABuffers(LLRenderTarget* src);
     void applySMAA(LLRenderTarget* src, LLRenderTarget* dst);
-    void renderDoF(LLRenderTarget* src, LLRenderTarget* dst);
+    bool renderDoF(LLRenderTarget* src, LLRenderTarget* dst, bool copy_on_skip = true);
     void copyRenderTarget(LLRenderTarget* src, LLRenderTarget* dst);
     void combineGlow(LLRenderTarget* src, LLRenderTarget* dst);
     void visualizeBuffers(LLRenderTarget* src, LLRenderTarget* dst, U32 bufferIndex);
@@ -747,6 +747,7 @@ public:
 
     // exposure map for getting average color in scene
     LLRenderTarget          mLuminanceMap;
+    LLRenderTarget          mLuminanceDownsample;
     LLRenderTarget          mExposureMap;
     LLRenderTarget          mLastExposure;
 

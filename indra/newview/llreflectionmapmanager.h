@@ -194,8 +194,15 @@ private:
 
     std::vector<LLRenderTarget> mMipChain;
 
-    // storage for reflection probe radiance maps (plus two scratch space cubemaps)
+    // storage for reflection probe radiance maps
     LLPointer<LLCubeMapArray> mTexture;
+
+    // scratch space cubemaps (2) used as source for radiance/irradiance filtering
+    // kept separate from mTexture so filtering can render directly to mTexture layers without feedback loops or glCopyTexSubImage3D
+    LLPointer<LLCubeMapArray> mScratchTexture;
+
+    // FBO used to render directly into cubemap array layers via glFramebufferTextureLayer
+    U32 mCubeFBO = 0;
 
     // vertex buffer for pushing verts to filter shaders
     LLPointer<LLVertexBuffer> mVertexBuffer;

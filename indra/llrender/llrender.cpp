@@ -215,8 +215,6 @@ bool LLTexUnit::bind(LLTexture* texture, bool for_rendering, bool forceBind)
     stop_glerror();
     if (mIndex >= 0)
     {
-        gGL.flush();
-
         LLImageGL* gl_tex = NULL ;
 
         if (texture != NULL && (gl_tex = texture->getGLTexture()))
@@ -226,6 +224,7 @@ bool LLTexUnit::bind(LLTexture* texture, bool for_rendering, bool forceBind)
                 //in audit, replace the selected texture by the default one.
                 if ((mCurrTexture != gl_tex->getTexName()) || forceBind)
                 {
+                    gGL.flush();
                     activate();
                     enable(gl_tex->getTarget());
                     mCurrTexture = gl_tex->getTexName();
@@ -247,6 +246,7 @@ bool LLTexUnit::bind(LLTexture* texture, bool for_rendering, bool forceBind)
             else
             {
                 //if deleted, will re-generate it immediately
+                gGL.flush();
                 texture->forceImmediateUpdate() ;
 
                 gl_tex->forceUpdateBindStats() ;
@@ -255,6 +255,7 @@ bool LLTexUnit::bind(LLTexture* texture, bool for_rendering, bool forceBind)
         }
         else
         {
+            gGL.flush();
             if (texture)
             {
                 LL_DEBUGS() << "NULL LLTexUnit::bind GL image" << LL_ENDL;
@@ -329,10 +330,9 @@ bool LLTexUnit::bind(LLCubeMap* cubeMap)
 {
     if (mIndex < 0) return false;
 
-    gGL.flush();
-
     if (cubeMap == NULL)
     {
+        gGL.flush();
         LL_WARNS() << "NULL LLTexUnit::bind cubemap" << LL_ENDL;
         return false;
     }
@@ -341,6 +341,7 @@ bool LLTexUnit::bind(LLCubeMap* cubeMap)
     {
         if (LLCubeMap::sUseCubeMaps)
         {
+            gGL.flush();
             activate();
             enable(LLTexUnit::TT_CUBE_MAP);
             mCurrTexture = cubeMap->mImages[0]->getTexName();
@@ -368,8 +369,6 @@ bool LLTexUnit::bind(LLCubeMap* cubeMap)
 bool LLTexUnit::bind(LLRenderTarget* renderTarget, bool bindDepth)
 {
     if (mIndex < 0) return false;
-
-    gGL.flush();
 
     if (bindDepth)
     {

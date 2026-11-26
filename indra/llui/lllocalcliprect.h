@@ -51,6 +51,11 @@ private:
     bool            mEnabled;
 
     static std::stack<LLRect> sClipRectStack;
+    static bool sCurScissorValid;
+    static S32 sCurScissorX;
+    static S32 sCurScissorY;
+    static S32 sCurScissorW;
+    static S32 sCurScissorH;
 };
 
 class LLLocalClipRect : public LLScreenClipRect
